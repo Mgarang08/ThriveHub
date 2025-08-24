@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Anxiety Copilot – Stress Support Chatbot</title>
+  <style>
+    :root{
+      --bg:#f7f8ff; --card:#ffffffcc; --text:#1f2937; --muted:#6b7280;
+      --primary:#111827; --border:#e5e7eb; --accent:#eef2ff;
+      --shadow:0 8px 16px rgba(0,0,0,.06); --radius:16px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;color:var(--text);background:linear-gradient(#eef2ff,#fff)}
+    header{position:sticky;top:0;backdrop-filter:blur(8px);background:#ffffffb3;border-bottom:1px solid var(--border)}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    .hstack{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .badge{font-size:12px;color:var(--muted)}
+    main{padding:16px}
+    .grid{display:grid;grid-template-columns:1fr 340px;gap:16px}
+    @media (max-width:900px){.grid{grid-template-columns:1fr}}
+
+
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+    .chat{height:70vh;display:flex;flex-direction:column}
+    .chat-log{padding:12px;overflow-y:auto;flex:1}
+    .chat-row{display:flex;margin:8px 0}
+    .bubble{max-width:80%;padding:10px 14px;border-radius:18px;line-height:1.4}
+    .bubble.user{margin-left:auto;background:var(--primary);color:#fff}
+    .bubble.bot{background:#fff;border:1px solid var(--border)}
+    .chat-input{border-top:1px solid var(--border);padding:8px;display:flex;gap:8px}
+    input[type="text"], textarea, select{width:100%;padding:12px;border:1px solid var(--border);border-radius:14px;font:inherit}
+    button{border:1px solid var(--border);background:#fff;border-radius:999px;padding:10px 14px;cursor:pointer}
+    button.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+    button:disabled{opacity:.6;cursor:not-allowed}
+
+
+    .chips{display:flex;flex-wrap:wrap;gap:8px}
+    .chip{padding:6px 10px;border:1px solid var(--border);border-radius:999px;font-size:14px;background:#fff}
+
+
+    .list{padding:16px}
+    .list .section-title{font-weight:600;margin:0 0 8px}
+    .list .item{padding:10px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;background:#fff}
+
+
+    .note{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:12px;padding:12px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap hstack">
+      <div>
+        <h1 style="margin:4px 0;font-size:20px;font-weight:800;">Anxiety Copilot 🧠💬</h1>
+        <div class="badge">MVP · Chat + Routines · Daily Streaks</div>
+      </div>
+      <div style="text-align:right">
+        <div id="xp" style="font-weight:700">Mental Wellness XP: 0</div>
+        <div id="xpBadge" class="badge">—</div>
+      </div>
+    </div>
+  </header>
+
+
+  <main class="wrap">
+    <div class="grid">
+      <!-- Chat Column -->
+      <section class="card chat">
+        <div id="log" class="chat-log"></div>
+        <div id="routineBox" class="list" style="display:none; border-top:1px solid var(--border)"></div>
+        <div class="chat-input">
+          <input id="text" type="text" placeholder="Tell me what's up..." />
+          <button id="send" class="primary" type="button">Send</button>
+        </div>
+      </section>
+
+
+      <!-- Side Column -->
+      <aside class="grid" style="grid-template-columns:1fr; gap:16px;">
+        <div class="card list">
+          <div class="section-title">Quick Buttons</div>
+          <div class="chips">
+            <button class="chip" data-quick="anxious" type="button">I'm anxious</button>
+            <button class="chip" data-quick="focus" type="button">I need focus</button>
+            <button class="chip" data-quick="overwhelmed" type="button">I'm overwhelmed</button>
+          </div>
+        </div>
+
+
+        <div class="card list">
+          <div class="section-title">Pre-scripted Routines</div>
+          <div id="routineList"></div>
+        </div>
+
+
+        <div class="note">
+          <strong>Friendly Reminder:</strong>
+          <div class="small" style="margin-top:6px">This tool is not a crisis service. If you’re in danger or considering self-harm, contact local emergency services or a trusted adult right away.</div>
+        </div>
+        
+      </aside>
+    </div>
+  </main>
+
+
+  <script>
+    // ----------------------------- Storage helpers -----------------------------
+    const LS = { msgs:'ac_msgs_v1', streak:'ac_streak_v1', gpt:'ac_gpt_v1' };
+    const load = (k,f)=>{ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):f }catch{ return f } };
+    const save = (k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} };
+
+
+    // 🔄 Always start fresh chat on reload (keeps XP & API key)
+    try { localStorage.removeItem(LS.msgs); } catch {}
+
+
+    // ----------------------------- Routines -----------------------------
+    const ROUTINES = {
+      breathing:{ id:'breathing', title:'Box Breathing (4-4-4-4)', quick:'Try 4 rounds now.',
+        steps:['Sit comfortably. Drop your shoulders.','Inhale through your nose for 4…','Hold for 4…','Exhale slowly through your mouth for 4…','Hold for 4…','Repeat 4 rounds. Notice any difference.'] },
+      grounding:{ id:'grounding', title:'5-4-3-2-1 Grounding', quick:'Use senses to anchor.',
+        steps:['Look around: name 5 things you can SEE.','Name 4 things you can TOUCH.','Name 3 things you can HEAR.','Name 2 things you can SMELL.','Name 1 thing you can TASTE.','Slow breath. What’s one thing you’re grateful for?'] },
+      focus:{ id:'focus', title:'Micro-Focus (3–2–1)', quick:'Shrink the task.',
+        steps:['3 minutes: tidy your workspace.','2 minutes: write your top ONE task.','1 minute: do the first tiny action.','Then continue 10 minutes—or break.'] }
+    };
+
+
+    const QUICK_TO_ROUTINE = { anxious:'breathing', focus:'focus', overwhelmed:'grounding' };
+
+
+    const SAFETY = "This tool is not a crisis service. If you're in danger or considering self-harm, contact local emergency services or a trusted adult right away.";
+
+
+    // ----------------------------- State -----------------------------
+    const state = {
+      msgs: [{ role:'assistant', text:"Hey! I'm your Anxiety Copilot. Tap a quick button or tell me what's up. 💬"}],
+      streak: load(LS.streak, { count:0, lastDate:null }),
+      gpt: load(LS.gpt, { apiKey:'', use:false })
+    };
+
+
+    // ----------------------------- DOM -----------------------------
+    const el = id => document.getElementById(id);
+    const log = el('log');
+    const routineBox = el('routineBox');
+    const text = el('text');
+    const send = el('send');
+    const xp = el('xp');
+    const xpBadge = el('xpBadge');
+
+
+    // ----------------------------- Rendering -----------------------------
+    function render(){ renderXP(); renderLog(); }
+
+
+    function renderXP(){
+      xp.textContent = `Mental Wellness XP: ${state.streak.count}`;
+      const c = state.streak.count;
+      xpBadge.textContent = c>=10 ? '🔥 Legendary Streak' : c>=5 ? '💪 Strong Streak' : c>=1 ? '🌱 Getting Started' : '—';
+    }
+
+
+    function renderLog(){
+      log.innerHTML = '';
+      state.msgs.forEach(m => {
+        let content;
+        try{
+          const payload = JSON.parse(m.text);
+          if (payload && payload._suggest){
+            content = document.createElement('div');
+            content.className = 'chips';
+            payload._suggest.forEach(s => {
+              const b = document.createElement('button');
+              b.className = 'chip';
+              b.textContent = s.label;
+              b.type = 'button';
+              b.addEventListener('click', () => handleSuggestAction(s.action));
+              content.appendChild(b);
+            });
+          }
+        } catch {}
+
+
+        const row = document.createElement('div');
+        row.className = 'chat-row';
+        const bub = document.createElement('div');
+        bub.className = 'bubble ' + (m.role==='user' ? 'user':'bot');
+        bub.innerText = content ? '' : m.text;
+        row.appendChild(bub);
+        log.appendChild(row);
+        if (content) row.appendChild(content);
+      });
+      log.scrollTop = log.scrollHeight;
+    }
+
+
+    // ----------------------------- Chat logic -----------------------------
+    function pushUser(t){ state.msgs.push({role:'user', text:t}); persist(); renderLog(); }
+    function pushAssistant(t){ state.msgs.push({role:'assistant', text:t}); persist(); renderLog(); }
+
+
+    async function callBackend(message){
+      const res = await fetch("http://127.0.0.1:5000/api/anxiety-copilot", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ user_id: "demo", message })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    async function sendText(){
+      const t = text.value.trim();
+      if (!t) return;
+      text.value = '';
+      pushUser(t);
+
+      await new Promise(r => setTimeout(r, 250));
+
+      let reply;
+      try {
+        const data = await callBackend(t);
+        reply = { text: data.reply };   // backend sends { reply: "..." }
+      } catch (e) {
+        console.warn("Backend failed, falling back to ruleBasedReply:", e);
+        reply = ruleBasedReply(t);
+      }
+
+      pushAssistant(reply.text);
+      if (reply.suggest && reply.suggest.length){
+        pushAssistant(JSON.stringify({ _suggest: reply.suggest }));
+      }
+    }
+    
+    function ruleBasedReply(t){
+      const s = t.toLowerCase();
+      if (/(panic|attack|breath|nervous|anxious|anxiety|test|exam|presentation)/.test(s)){
+        return { text:"Sounds tough, and you're not alone. Want to try something together? I can guide box breathing, 5-4-3-2-1 grounding, or a 3–2–1 micro-focus. Which one?",
+          suggest:[{label:'Box Breathing',action:{type:'routine',id:'breathing'}},{label:'Grounding 5-4-3-2-1',action:{type:'routine',id:'grounding'}},{label:'Micro-Focus',action:{type:'routine',id:'focus'}}] };
+      }
+      if (/(overwhelm|overwhelmed|too much|can't|stressed|stress)/.test(s)){
+        return { text:"Let's lighten the load. We can ground your body first, then pick one tiny next step. Want grounding or micro-focus?",
+          suggest:[{label:'Grounding',action:{type:'routine',id:'grounding'}},{label:'Micro-Focus',action:{type:'routine',id:'focus'}}] };
+      }
+      if (/(sleep|night|insomnia|tired)/.test(s)){
+        return { text:'For sleep stress, try a few rounds of box breathing and keep lights low. Want the steps?',
+          suggest:[{label:'Box Breathing',action:{type:'routine',id:'breathing'}}] };
+      }
+      return { text:"I'm here. Take one slow breath with me. What feels helpful: grounding, breathing, or a quick focus reset?",
+        suggest:[{label:'Grounding',action:{type:'routine',id:'grounding'}},{label:'Breathing',action:{type:'routine',id:'breathing'}},{label:'Focus Reset',action:{type:'routine',id:'focus'}}] };
+    }
+
+    function handleSuggestAction(action){ if (action && action.type==='routine') startRoutine(action.id); }
+
+
+    function startRoutine(id){
+      const r = ROUTINES[id]; if (!r) return;
+      pushAssistant('Starting: ' + r.title);
+      renderRoutine(r);
+    }
+
+
+    function renderRoutine(r){
+      routineBox.style.display = 'block';
+      let step = 0;
+      const draw = ()=>{
+        routineBox.innerHTML = `
+          <div class="item" style="background:#fff">
+            <div class="hstack" style="margin-bottom:6px">
+              <div style="font-weight:700">${r.title}</div>
+              <div class="small">${r.quick}</div>
+            </div>
+            <div style="margin:10px 0; line-height:1.5">${escapeHtml(r.steps[step] || 'All done!')}</div>
+            <div class="hstack" style="gap:8px; justify-content:flex-start">
+              ${step < r.steps.length ? '<button class="primary" id="nextStep" type="button">Next</button>' : ''}
+              ${step > 0 ? '<button id="backStep" type="button">Back</button>' : ''}
+              ${step >= r.steps.length ? '<button class="primary" id="completeRoutine" type="button">Mark Complete ✅</button>' : ''}
+            </div>
+          </div>`;
+        const next = document.getElementById('nextStep');
+        const back = document.getElementById('backStep');
+        const done = document.getElementById('completeRoutine');
+        if (next) next.addEventListener('click', ()=>{ step++; draw(); });
+        if (back) back.addEventListener('click', ()=>{ step = Math.max(0, step-1); draw(); });
+        if (done) done.addEventListener('click', ()=>{ routineBox.style.display='none'; completeRoutine(); });
+      };
+      draw();
+    }
+
+
+    function completeRoutine(){
+      pushAssistant('Nice work. Want to do another round or pick a different routine?');
+      bumpStreak();
+    }
+
+
+    function bumpStreak(){
+      const today = new Date().toISOString().slice(0,10);
+      const y = new Date(Date.now()-86400000).toISOString().slice(0,10);
+      const last = state.streak.lastDate;
+      state.streak = { lastDate: today, count: last===y ? (state.streak.count+1) : (last===today ? state.streak.count : 1) };
+      persist(); renderXP();
+    }
+
+
+    function persist(){
+      // Intentionally NOT saving msgs so each reload starts fresh
+      save(LS.streak, state.streak);
+      save(LS.gpt, state.gpt);
+    }
+
+
+    function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+
+    // ----------------------------- Kickoff -----------------------------
+    render();
+
+
+    // Send button / Enter key
+    send.addEventListener('click', ()=>sendText());
+    text.addEventListener('keydown', e => { if (e.key==='Enter') sendText(); });
+
+
+    // ✅ Robust: Event delegation for quick buttons
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-quick]');
+      if (!btn) return;
+      const v = btn.getAttribute('data-quick');
+      const rid = QUICK_TO_ROUTINE[v];
+      if (rid) startRoutine(rid);
+    });
+
+
+    // Routines list
+    const routineList = document.getElementById('routineList');
+    routineList.innerHTML = Object.values(ROUTINES).map(r => `
+      <div class="item">
+        <div style="font-weight:600;">${r.title}</div>
+        <div class="small">${r.quick}</div>
+        <div style="margin-top:6px"><button class="chip" data-rid="${r.id}" type="button">Start</button></div>
+      </div>
+    `).join('');
+    routineList.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-rid]');
+      if (!b) return;
+      startRoutine(b.getAttribute('data-rid'));
+    });
+  </script>
+</body>
+</html>
