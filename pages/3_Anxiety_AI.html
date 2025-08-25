@@ -34,8 +34,10 @@
     button.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
     button:disabled{opacity:.6;cursor:not-allowed}
 
+
     .chips{display:flex;flex-wrap:wrap;gap:8px}
     .chip{padding:6px 10px;border:1px solid var(--border);border-radius:999px;font-size:14px;background:#fff}
+
 
     .list{padding:16px}
     .list .section-title{font-weight:600;margin:0 0 8px}
@@ -59,9 +61,10 @@
     </div>
   </header>
 
+
   <main class="wrap">
     <div class="grid">
-
+      <!-- Chat Column -->
       <section class="card chat">
         <div id="log" class="chat-log"></div>
         <div id="routineBox" class="list" style="display:none; border-top:1px solid var(--border)"></div>
@@ -71,6 +74,8 @@
         </div>
       </section>
 
+
+      <!-- Side Column -->
       <aside class="grid" style="grid-template-columns:1fr; gap:16px;">
         <div class="card list">
           <div class="section-title">Quick Buttons</div>
@@ -81,10 +86,12 @@
           </div>
         </div>
 
+
         <div class="card list">
           <div class="section-title">Pre-scripted Routines</div>
           <div id="routineList"></div>
         </div>
+
 
         <div class="note">
           <strong>Friendly Reminder:</strong>
@@ -97,13 +104,17 @@
 
 
   <script>
+    // ----------------------------- Storage helpers -----------------------------
     const LS = { msgs:'ac_msgs_v1', streak:'ac_streak_v1', gpt:'ac_gpt_v1' };
     const load = (k,f)=>{ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):f }catch{ return f } };
     const save = (k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} };
 
 
+    // 🔄 Always start fresh chat on reload (keeps XP & API key)
     try { localStorage.removeItem(LS.msgs); } catch {}
 
+
+    // ----------------------------- Routines -----------------------------
     const ROUTINES = {
       breathing:{ id:'breathing', title:'Box Breathing (4-4-4-4)', quick:'Try 4 rounds now.',
         steps:['Sit comfortably. Drop your shoulders.','Inhale through your nose for 4…','Hold for 4…','Exhale slowly through your mouth for 4…','Hold for 4…','Repeat 4 rounds. Notice any difference.'] },
@@ -113,15 +124,22 @@
         steps:['3 minutes: tidy your workspace.','2 minutes: write your top ONE task.','1 minute: do the first tiny action.','Then continue 10 minutes—or break.'] }
     };
 
+
     const QUICK_TO_ROUTINE = { anxious:'breathing', focus:'focus', overwhelmed:'grounding' };
+
+
     const SAFETY = "This tool is not a crisis service. If you're in danger or considering self-harm, contact local emergency services or a trusted adult right away.";
 
+
+    // ----------------------------- State -----------------------------
     const state = {
       msgs: [{ role:'assistant', text:"Hey! I'm your Anxiety Copilot. Tap a quick button or tell me what's up. 💬"}],
       streak: load(LS.streak, { count:0, lastDate:null }),
       gpt: load(LS.gpt, { apiKey:'', use:false })
     };
 
+
+    // ----------------------------- DOM -----------------------------
     const el = id => document.getElementById(id);
     const log = el('log');
     const routineBox = el('routineBox');
@@ -130,6 +148,8 @@
     const xp = el('xp');
     const xpBadge = el('xpBadge');
 
+
+    // ----------------------------- Rendering -----------------------------
     function render(){ renderXP(); renderLog(); }
 
 
@@ -138,6 +158,7 @@
       const c = state.streak.count;
       xpBadge.textContent = c>=10 ? '🔥 Legendary Streak' : c>=5 ? '💪 Strong Streak' : c>=1 ? '🌱 Getting Started' : '—';
     }
+
 
     function renderLog(){
       log.innerHTML = '';
@@ -173,12 +194,13 @@
     }
 
 
+    // ----------------------------- Chat logic -----------------------------
     function pushUser(t){ state.msgs.push({role:'user', text:t}); persist(); renderLog(); }
     function pushAssistant(t){ state.msgs.push({role:'assistant', text:t}); persist(); renderLog(); }
 
 
     async function callBackend(message){
-      const res = await fetch("https://thrivehub-a85v.onrender.com/api/anxiety-copilot", {
+      const res = await fetch("http://127.0.0.1:5000/api/anxiety-copilot", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({ user_id: "demo", message })
@@ -198,7 +220,7 @@
       let reply;
       try {
         const data = await callBackend(t);
-        reply = { text: data.reply }; 
+        reply = { text: data.reply };   // backend sends { reply: "..." }
       } catch (e) {
         console.warn("Backend failed, falling back to ruleBasedReply:", e);
         reply = ruleBasedReply(t);
@@ -237,6 +259,7 @@
       renderRoutine(r);
     }
 
+
     function renderRoutine(r){
       routineBox.style.display = 'block';
       let step = 0;
@@ -264,10 +287,12 @@
       draw();
     }
 
+
     function completeRoutine(){
       pushAssistant('Nice work. Want to do another round or pick a different routine?');
       bumpStreak();
     }
+
 
     function bumpStreak(){
       const today = new Date().toISOString().slice(0,10);
@@ -277,19 +302,27 @@
       persist(); renderXP();
     }
 
-    function persist(){
 
+    function persist(){
+      // Intentionally NOT saving msgs so each reload starts fresh
       save(LS.streak, state.streak);
       save(LS.gpt, state.gpt);
     }
 
+
     function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+
+    // ----------------------------- Kickoff -----------------------------
     render();
 
+
+    // Send button / Enter key
     send.addEventListener('click', ()=>sendText());
     text.addEventListener('keydown', e => { if (e.key==='Enter') sendText(); });
 
+
+    // ✅ Robust: Event delegation for quick buttons
     document.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-quick]');
       if (!btn) return;
@@ -298,6 +331,8 @@
       if (rid) startRoutine(rid);
     });
 
+
+    // Routines list
     const routineList = document.getElementById('routineList');
     routineList.innerHTML = Object.values(ROUTINES).map(r => `
       <div class="item">

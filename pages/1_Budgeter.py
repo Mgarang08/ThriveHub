@@ -9,7 +9,7 @@ import os
 import requests
 
 st.set_page_config(page_title="Budgeter", layout="wide")
-BACKEND = "https://thrivehub-a85v.onrender.com"
+BACKEND = "http://127.0.0.1:5000"
 
 DATA_FILE = Path("pages/budgeter_state.json")
 GOAL_FILE = Path("pages/budgeter_goal.json")
@@ -73,17 +73,31 @@ def apply_theme_css(bg: str, text: str):
         f"""
         <style>
         :root
-        {{--budgeter-bg: {bg}; --budgeter-text: {text}; --btn-bg: {btn_bg}; --btn-bg-hover: {btn_bg_hover}; --btn-fg: {btn_fg}; --btn-border: {btn_border};}}
+        {{
+          --budgeter-bg: {bg};
+          --budgeter-text: {text};
+          --btn-bg: {btn_bg};
+          --btn-bg-hover: {btn_bg_hover};
+          --btn-fg: {btn_fg};
+          --btn-border: {btn_border};
+        }}
 
         .stApp
-        {{background-color: var(--budgeter-bg) !important; color: var(--budgeter-text) !important;}}
+        {{
+          background-color: var(--budgeter-bg) !important;
+          color: var(--budgeter-text) !important;
+        }}
         .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
         .stMarkdown, .stText, label,
         div[data-testid="stMetricValue"], div[data-testid="stMetricLabel"]
-        {{color: var(--budgeter-text) !important;}}
+        {{
+          color: var(--budgeter-text) !important;
+        }}
 
         input, textarea, select
-        {{color: #111827 !important;}}
+        {{
+          color: #111827 !important;
+        }}
 
         .stButton > button,
         .stDownloadButton > button,
@@ -91,22 +105,33 @@ def apply_theme_css(bg: str, text: str):
         button[kind],
         div[data-testid="baseButton-secondary"] > button,
         div[data-testid="baseButton-primary"] > button
-        {{background-color: var(--btn-bg) !important;color: var(--btn-fg) !important;border: 1px solid var(--btn-border) !important; box-shadow: none !important;}}
+        {{
+          background-color: var(--btn-bg) !important;
+          color: var(--btn-fg) !important;
+          border: 1px solid var(--btn-border) !important;
+          box-shadow: none !important;
+        }}
         .stButton > button * ,
         .stDownloadButton > button * ,
         .stFormSubmitButton > button * ,
         button[kind] * ,
         div[data-testid="baseButton-secondary"] > button * ,
         div[data-testid="baseButton-primary"] > button *
-        {{color: var(--btn-fg) !important; fill: currentColor !important;}}
+        {{
+          color: var(--btn-fg) !important;
+          fill: currentColor !important;
+        }}
         .stButton > button:hover,
         .stDownloadButton > button:hover,
         .stFormSubmitButton > button:hover,
         button[kind]:hover,
         div[data-testid="baseButton-secondary"] > button:hover,
         div[data-testid="baseButton-primary"] > button:hover
-
-        {{background-color: var(--btn-bg-hover) !important; border-color: var(--btn-bg-hover) !important; color: var(--btn-fg) !important;}}
+        {{
+          background-color: var(--btn-bg-hover) !important;
+          border-color: var(--btn-bg-hover) !important;
+          color: var(--btn-fg) !important;
+        }}
         .stButton > button:disabled,
         .stDownloadButton > button:disabled,
         .stFormSubmitButton > button:disabled {{
@@ -254,7 +279,7 @@ def composition_pie_small(account_bal, savings_bal, spent_total, title="Composit
         return
     labels = ["In Account", "In Savings", "Spent"]
     values = [account_bal, savings_bal, spent_total]
-    colors = ["#2b6cb0", "#ed8936", "#38a169"]
+    colors = ["#2b6cb0", "#ed8936", "#38a169"]  # blue, orange, green
 
     fig, ax = plt.subplots(figsize=(4, 4))
     wedges, _ = ax.pie(values, colors=colors, startangle=90, wedgeprops=dict(linewidth=1, edgecolor="white"))

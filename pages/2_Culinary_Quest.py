@@ -1,3 +1,5 @@
+# app.py — Culinary Quest (v13: richer offline food illustrations + stable navigation)
+
 import streamlit as st
 from dataclasses import dataclass
 from typing import List, Dict, Any
@@ -6,10 +8,11 @@ import json, textwrap
 from streamlit.components.v1 import html as html_component
 import requests
 
-BACKEND = "https://thrivehub-a85v.onrender.com"
+BACKEND = "http://127.0.0.1:5000"
 
 st.set_page_config(page_title="Culinary Quest", layout="wide")
 
+# ---------- CSS ----------
 st.markdown(
     """
     <style>
@@ -32,6 +35,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# ---------- Data ----------
 @dataclass
 class Recipe:
     name: str
@@ -134,6 +138,7 @@ def get_all_recipes() -> Dict[str, Recipe]:
             recipes.update(load_user_recipes_file(jf))
     return recipes
 
+# ---------- Offline SVG step illustrations ----------
 def svg_html(svg: str, height: int = 320):
     html_component(svg, height=height, scrolling=False)
 
@@ -154,6 +159,7 @@ def scene(recipe: str, text: str) -> str:
     r = recipe.lower()
     k = kind_from_text(text)
 
+    # shared shapes
     plate = "<ellipse cx='500' cy='220' rx='200' ry='26' fill='#e2e8f0'/>"
     steam = (
         "<g opacity='.8' fill='none' stroke='#94a3b8' stroke-width='3'>"
@@ -183,7 +189,7 @@ def scene(recipe: str, text: str) -> str:
             tri1 = "<polygon points='470,160 610,160 540,220' fill='#fde68a' stroke='#f59e0b'/>"
             tri2 = "<polygon points='470,160 400,220 540,220' fill='#f59e0b' opacity='.35'/>"
             return plate + tri1 + tri2
-        
+        # lay out bread
         return plate + bread_top + bread_bottom
 
     if "quesadilla" in r:
@@ -262,6 +268,7 @@ def scene(recipe: str, text: str) -> str:
             return bowl + fruit + spoon
         return board + kiwi + berry + banana
 
+    # generic prep/mix/pan scenes
     if k == "chop":
         board = "<rect x='380' y='150' width='240' height='70' rx='12' fill='#fcd34d' stroke='#f59e0b'/>"
         knife = "<rect x='585' y='160' width='12' height='60' rx='6' fill='#94a3b8'/><rect x='568' y='178' width='32' height='12' rx='6' fill='#374151'/>"
@@ -281,7 +288,7 @@ def scene(recipe: str, text: str) -> str:
         spoon= "<rect x='580' y='120' width='14' height='70' rx='7' fill='#9ca3af'/><circle cx='587' cy='118' r='12' fill='#9ca3af'/>"
         dots = "<circle cx='480' cy='180' r='6' fill='#f59e0b'/><circle cx='520' cy='186' r='6' fill='#ef4444'/>"
         return bowl + dots + spoon
-
+    # prep
     plate = "<ellipse cx='500' cy='220' rx='200' ry='26' fill='#e2e8f0'/>"
     knife = "<rect x='590' y='160' width='12' height='60' rx='6' fill='#94a3b8'/><rect x='572' y='178' width='32' height='12' rx='6' fill='#374151'/>"
     return plate + knife
@@ -313,11 +320,13 @@ def step_svg(recipe: str, step_idx: int, total: int, text: str) -> str:
     </div>
     """
 
+# ---------- State ----------
 if "screen" not in st.session_state:      st.session_state.screen = "home"
 if "recipe_key" not in st.session_state:  st.session_state.recipe_key = None
 if "step_idx" not in st.session_state:    st.session_state.step_idx = 0
 if "ingredients" not in st.session_state: st.session_state.ingredients = []
 
+# ---------- Navigation ----------
 def load_recipe(key: str):
     st.session_state.recipe_key = key
     st.session_state.step_idx = 0
@@ -333,6 +342,7 @@ def next_step():
 def prev_step():
     st.session_state.step_idx = max(st.session_state.step_idx - 1, 0)
 
+# ---------- Command Panel ----------
 def _normalize_ingredients_state():
     """Ensure session ingredients are a simple list[str] of names."""
     raw = st.session_state.get("ingredients", [])
@@ -354,15 +364,16 @@ def _keyify(s: str) -> str:
 import re
 
 def _parse_dish_name(recipe_text: str) -> str:
-
+    # 1) Look for "DISH NAME: ..."
     m = re.search(r'(?im)^\s*(?:dish\s*name|title)\s*:\s*(.+?)\s*$', recipe_text)
     if m:
         return m.group(1).strip()
 
+    # 2) Otherwise take the first non-empty line (without bullet/number prefixes)
     for ln in (ln.strip() for ln in recipe_text.splitlines()):
         if not ln:
             continue
-        ln = re.sub(r'^(?:\d+\.\s*|-\s*|•\s*)', '', ln)
+        ln = re.sub(r'^(?:\d+\.\s*|-\s*|•\s*)', '', ln)  # strip "1. ", "- ", "• "
         if ln:
             return ln[:80].strip()
 
@@ -388,6 +399,7 @@ def command_panel_ui(scope: str):
         add_btn = colA.form_submit_button("Add to List", use_container_width=True)
         api_btn = colB.form_submit_button("🔎 Get Recipe", use_container_width=True)
 
+        # ---- Parse freshly typed inputs
         import re
         names = []
         if ing_block:
@@ -396,6 +408,7 @@ def command_panel_ui(scope: str):
         if single and single.strip():
             names.append(single.strip())
 
+        # ---- De-dup helper
         def _dedup_merge(existing: list[str], new_items: list[str]) -> list[str]:
             seen = {n.lower() for n in existing}
             added = []
@@ -406,6 +419,7 @@ def command_panel_ui(scope: str):
                     added.append(n)
             return existing + added
 
+        # A) Add to local list
         if add_btn:
             if names:
                 before = len(st.session_state.ingredients)
@@ -415,6 +429,7 @@ def command_panel_ui(scope: str):
             else:
                 st.info("Type one or more ingredient names first.")
 
+        # B) Send to backend (everything we have, including newly typed)
         if api_btn:
             to_send = _dedup_merge(list(st.session_state.ingredients), names)
             if not to_send:
@@ -427,11 +442,13 @@ def command_panel_ui(scope: str):
                         timeout=20
                     )
                     r.raise_for_status()
-                    data = r.json() 
+                    data = r.json()  # { recipe: "...", xp_gained: ..., ... }
 
+                    # Show the raw recipe text
                     st.success("Recipe from backend:")
                     st.code(data.get("recipe", ""), language="markdown")
 
+                    # Optional: jump into your step viewer using returned text
                     recipe_text = data.get("recipe", "")
                     lines = [ln.strip() for ln in recipe_text.splitlines() if ln.strip()]
                     steps = [ln for ln in lines if ln.lower().startswith(("1.", "2.", "3.", "4.", "step", "- "))]
@@ -454,6 +471,7 @@ def command_panel_ui(scope: str):
                 except Exception as e:
                     st.error(f"API error: {e}")
 
+    # --- Current list with per-item delete ---
     if st.session_state.ingredients:
         st.markdown("#### Current Ingredients")
         to_delete_index = None
@@ -466,6 +484,7 @@ def command_panel_ui(scope: str):
                 if st.button("Remove", key=f"del_{scope}_{i}_{_keyify(name)}"):
                     to_delete_index = i
 
+        # Apply deletion after the loop (safer for Streamlit)
         if to_delete_index is not None:
             del st.session_state.ingredients[to_delete_index]
             try:
@@ -486,6 +505,7 @@ def _all_recipes_with_ai() -> Dict[str, Recipe]:
         recipes[ai["name"]] = Recipe(ai["name"], ai["steps"], ai["time_min"])
     return recipes
 
+# ---------- Home ----------
 def slug(s: str) -> str:
     return "".join(ch.lower() if ch.isalnum() else "_" for ch in s)
 
@@ -517,6 +537,7 @@ def home_screen():
                 load_recipe(key)
                 st.rerun()
 
+# ---------- Recipe ----------
 def recipe_screen():
     recipes = get_all_recipes()
     if "ai_recipe" in st.session_state:
@@ -560,6 +581,7 @@ def recipe_screen():
             st.session_state.step_idx = 0
             st.toast("Restarted")
 
+# ---------- Router ----------
 if st.session_state.screen == "home":
     home_screen()
 else:

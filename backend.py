@@ -10,7 +10,7 @@ import json
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app)
 
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
@@ -22,7 +22,6 @@ SETTINGS_FILE = Path("pages/budgeter_settings.json")
 TRANSACTIONS_FILE = Path("pages/budgeter_transactions.jsonl")
 
 def load_budget_data():
-    account, savings = 0.0, 0.0
     if DATA_FILE.exists():
         try:
             d = json.loads(DATA_FILE.read_text())
